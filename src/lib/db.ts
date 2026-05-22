@@ -120,6 +120,9 @@ export interface SiteConfig {
   theme_color: string;
   category_order: string;
   default_category: string;
+  home_columns: string;
+  weather_enabled: string;
+  github_url: string;
   admin_password: string;
   admin_session: string;
 }
@@ -133,6 +136,9 @@ const defaultConfig: SiteConfig = {
   theme_color: "#22c55e",
   category_order: "[]",
   default_category: "all",
+  home_columns: "3",
+  weather_enabled: "true",
+  github_url: "https://github.com/ryan0966/HomeDir",
   admin_password: "",
   admin_session: "",
 };
@@ -150,6 +156,9 @@ export function getConfig(): SiteConfig {
     theme_color: map.get("theme_color") || defaultConfig.theme_color,
     category_order: map.get("category_order") || defaultConfig.category_order,
     default_category: map.get("default_category") || defaultConfig.default_category,
+    home_columns: map.get("home_columns") || defaultConfig.home_columns,
+    weather_enabled: map.get("weather_enabled") ?? defaultConfig.weather_enabled,
+    github_url: map.get("github_url") || defaultConfig.github_url,
     admin_password: map.get("admin_password") || "",
     admin_session: map.get("admin_session") || "",
   };
@@ -241,6 +250,25 @@ export function deleteSite(id: string): boolean {
   const result = db.prepare("DELETE FROM sites WHERE id = ?").run(id);
 
   return result.changes > 0;
+}
+
+export function updateSiteSort(id: string, sortOrder: number): boolean {
+  const db = getDb();
+  const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).replace(' ', 'T');
+  const result = db.prepare("UPDATE sites SET sort_order = ?, updated_at = ? WHERE id = ?").run(sortOrder, now, id);
+  return result.changes > 0;
+}
+
+export function reorderSites(updates: { id: string; category: string; sort_order: number }[]): void {
+  const db = getDb();
+  const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).replace(' ', 'T');
+  const stmt = db.prepare("UPDATE sites SET category = ?, sort_order = ?, updated_at = ? WHERE id = ?");
+  const run = db.transaction((items: { id: string; category: string; sort_order: number }[]) => {
+    for (const item of items) {
+      stmt.run(item.category, item.sort_order, now, item.id);
+    }
+  });
+  run(updates);
 }
 
 // 分类操作

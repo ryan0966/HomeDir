@@ -3,13 +3,14 @@
 import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { updateConfigAction, uploadLogoAction } from "@/app/dash/actions";
+import { GithubIcon } from "@/components/icons/github";
 import { getIconUrl } from "@/lib/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Image, Loader2, Save, Upload, X } from "lucide-react";
+import { CloudSun, Columns3, Image, Loader2, Save, Upload, X } from "lucide-react";
 
 export function AdminSettings({
   config,
@@ -23,6 +24,9 @@ export function AdminSettings({
     site_logo: string;
     theme_color: string;
     default_category: string;
+    home_columns: string;
+    weather_enabled: string;
+    github_url: string;
   };
   categories: string[];
 }) {
@@ -35,6 +39,9 @@ export function AdminSettings({
     site_logo: config.site_logo,
     theme_color: config.theme_color,
     default_category: config.default_category,
+    home_columns: config.home_columns,
+    weather_enabled: config.weather_enabled,
+    github_url: config.github_url,
   });
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -173,6 +180,35 @@ export function AdminSettings({
               ))}
             </div>
           </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="cfg_home_columns" className="flex items-center gap-1.5">
+              <Columns3 className="size-3.5" />
+              首页每行站点数
+            </Label>
+            <Input
+              id="cfg_home_columns"
+              type="number"
+              min={1}
+              max={8}
+              value={form.home_columns}
+              onChange={(e) => setForm((p) => ({ ...p, home_columns: e.target.value }))}
+              className="h-8 w-24 text-xs"
+            />
+            <p className="text-[11px] text-muted-foreground">作为大屏期望列数，小屏会自动减少，优先保证卡片完整显示</p>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="cfg_github_url" className="flex items-center gap-1.5">
+              <GithubIcon className="size-3.5" />
+              GitHub 链接
+            </Label>
+            <Input
+              id="cfg_github_url"
+              value={form.github_url}
+              onChange={(e) => setForm((p) => ({ ...p, github_url: e.target.value }))}
+              placeholder="https://github.com/ryan0966/HomeDir"
+              className="h-8 text-xs"
+            />
+          </div>
         </div>
         <div className="mt-4 flex justify-end">
           <Button size="sm" onClick={handleSave} disabled={saving}>
@@ -199,6 +235,19 @@ export function AdminSettings({
                 if (result.success) toast.success(v ? "已开启自动探测" : "已关闭自动探测");
                 else toast.error(result.error);
               }}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <Label className="flex items-center gap-1.5">
+                <CloudSun className="size-3.5" />
+                首页天气
+              </Label>
+              <p className="text-[11px] text-muted-foreground">根据浏览器定位或 IP 位置显示当前天气</p>
+            </div>
+            <Switch
+              checked={form.weather_enabled === "true"}
+              onCheckedChange={(v) => setForm((p) => ({ ...p, weather_enabled: v ? "true" : "false" }))}
             />
           </div>
         </div>

@@ -31,6 +31,9 @@ export default async function AdminPage() {
     site_logo: config.site_logo,
     theme_color: config.theme_color,
     default_category: config.default_category,
+    home_columns: config.home_columns,
+    weather_enabled: config.weather_enabled,
+    github_url: config.github_url,
   };
 
   return (

@@ -10,6 +10,9 @@ type SafeConfig = {
   site_logo: string;
   theme_color: string;
   default_category: string;
+  home_columns: string;
+  weather_enabled: string;
+  github_url: string;
 };
 import { AdminOverview } from "@/components/admin/overview";
 import { AdminSites } from "@/components/admin/sites";

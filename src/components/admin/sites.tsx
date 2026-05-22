@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import type { SiteData } from "@/lib/types";
 import { getIcon, getIconUrl, commonIcons } from "@/lib/icons";
 import {
@@ -9,6 +10,8 @@ import {
   deleteSiteAction,
   fetchFaviconAction,
   uploadIconAction,
+  updateSiteSortAction,
+  reorderSitesAction,
 } from "@/app/dash/actions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,7 +31,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Loader2, Save, AlertTriangle, ChevronRight, ImageDown, Upload, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Save, AlertTriangle, ChevronRight, ImageDown, Upload, X, GripVertical } from "lucide-react";
 
 interface SiteFormData {
   name: string;
@@ -59,6 +62,7 @@ export function AdminSites({
   sites: SiteData[];
   categories: string[];
 }) {
+  const router = useRouter();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -68,8 +72,17 @@ export function AdminSites({
   const [deleting, setDeleting] = useState(false);
   const [fetchingIcon, setFetchingIcon] = useState(false);
   const [uploadingIcon, setUploadingIcon] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<{ id: string | null; category: string }>({ id: null, category: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const groups = useMemo(() => {
+    return categories.map((category) => ({
+      category,
+      sites: sites.filter((site) => site.category === category),
+    }));
+  }, [categories, sites]);
 
   const toggleGroup = (cat: string) => {
     setCollapsed((prev) => {
@@ -156,6 +169,50 @@ export function AdminSites({
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const saveInlineSort = useCallback(async (site: SiteData, value: string) => {
+    const nextOrder = Number.parseInt(value, 10);
+    if (!Number.isFinite(nextOrder) || nextOrder === site.sort_order) return;
+    const result = await updateSiteSortAction(site.id, nextOrder);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("序号已更新");
+    router.refresh();
+  }, [router]);
+
+  const moveDraggedSite = useCallback(async (targetCategory: string, targetId: string | null) => {
+    if (!draggingId) return;
+    if (targetId === draggingId) return;
+    const dragged = sites.find((site) => site.id === draggingId);
+    if (!dragged) return;
+
+    const nextGroups = new Map(groups.map((group) => [
+      group.category,
+      group.sites.filter((site) => site.id !== draggingId),
+    ]));
+    const targetList = nextGroups.get(targetCategory) ?? [];
+    const insertAt = targetId ? Math.max(0, targetList.findIndex((site) => site.id === targetId)) : targetList.length;
+    targetList.splice(insertAt === -1 ? targetList.length : insertAt, 0, { ...dragged, category: targetCategory });
+    nextGroups.set(targetCategory, targetList);
+
+    const updates = Array.from(nextGroups.entries()).flatMap(([category, list]) =>
+      list.map((site, index) => ({
+        id: site.id,
+        category,
+        sort_order: (index + 1) * 10,
+      }))
+    );
+
+    const result = await reorderSitesAction(updates);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("排序已更新");
+    router.refresh();
+  }, [draggingId, groups, router, sites]);
+
   const deletingSiteName = sites.find((s) => s.id === deletingId)?.name;
 
   return (
@@ -174,15 +231,23 @@ export function AdminSites({
         </div>
       ) : (
         <div className="space-y-3">
-          {Object.entries(
-            sites.reduce<Record<string, SiteData[]>>((acc, s) => {
-              (acc[s.category] ??= []).push(s);
-              return acc;
-            }, {})
-          ).map(([category, group]) => {
+          {groups.map(({ category, sites: group }) => {
             const isOpen = !collapsed.has(category);
             return (
-              <div key={category} className="overflow-hidden rounded-lg border">
+              <div
+                key={category}
+                className={`overflow-hidden rounded-lg border ${dragOver.category === category && !dragOver.id ? "ring-2 ring-ring/40" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver({ id: null, category });
+                }}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  await moveDraggedSite(category, null);
+                  setDraggingId(null);
+                  setDragOver({ id: null, category: "" });
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => toggleGroup(category)}
@@ -199,10 +264,33 @@ export function AdminSites({
                       return (
                         <div
                           key={site.id}
-                          className={`group flex items-center gap-3 px-3.5 py-2 transition-colors hover:bg-accent/20 ${
+                          draggable
+                          onDragStart={(e) => {
+                            setDraggingId(site.id);
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("text/plain", site.id);
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDragOver({ id: site.id, category });
+                          }}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            await moveDraggedSite(category, site.id);
+                            setDraggingId(null);
+                            setDragOver({ id: null, category: "" });
+                          }}
+                          onDragEnd={() => {
+                            setDraggingId(null);
+                            setDragOver({ id: null, category: "" });
+                          }}
+                          className={`group flex items-center gap-2 px-3.5 py-2 transition-colors hover:bg-accent/20 ${
                             i !== group.length - 1 ? "border-b" : ""
-                          }`}
+                          } ${draggingId === site.id ? "opacity-50" : ""} ${dragOver.id === site.id ? "bg-accent/30" : ""}`}
                         >
+                          <GripVertical className="size-3.5 shrink-0 cursor-grab text-muted-foreground/45 active:cursor-grabbing" />
                           {site.icon_url ? (
                             <img src={getIconUrl(site.icon_url)} alt="" className="size-4 shrink-0 rounded object-contain" />
                           ) : (
@@ -214,7 +302,17 @@ export function AdminSites({
                               <span className="ml-2 text-[11px] text-muted-foreground/50">{site.desc}</span>
                             )}
                           </div>
-                          <div className="flex shrink-0 gap-0.5 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                          <Input
+                            type="number"
+                            defaultValue={site.sort_order}
+                            onBlur={(e) => saveInlineSort(site, e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.currentTarget.blur();
+                            }}
+                            className="h-7 w-16 shrink-0 px-2 text-center text-xs"
+                            title="显示序号"
+                          />
+                          <div className="flex shrink-0 gap-0.5">
                             <Button variant="ghost" size="icon-sm" onClick={() => openEdit(site)}>
                               <Pencil className="size-3" />
                             </Button>

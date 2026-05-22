@@ -10,6 +10,8 @@ import {
   deleteCategory,
   updateConfig,
   saveCategoryOrder,
+  updateSiteSort,
+  reorderSites,
   createShortcut,
   deleteShortcut,
   getAllShortcuts,
@@ -94,6 +96,49 @@ export async function deleteSiteAction(id: string): Promise<ActionResult> {
   } catch (e) {
     console.error("删除站点失败:", e);
     return { success: false, error: "删除站点失败" };
+  }
+}
+
+export async function updateSiteSortAction(id: string, sortOrder: number): Promise<ActionResult> {
+  const authErr = await requireAuth();
+  if (authErr) return authErr;
+  if (!id) return { success: false, error: "站点 ID 不能为空" };
+  if (!Number.isFinite(sortOrder)) return { success: false, error: "序号无效" };
+
+  try {
+    const ok = updateSiteSort(id, Math.trunc(sortOrder));
+    if (!ok) return { success: false, error: "站点不存在" };
+    revalidatePath("/");
+    revalidatePath("/dash");
+    return { success: true };
+  } catch (e) {
+    console.error("更新站点序号失败:", e);
+    return { success: false, error: "更新站点序号失败" };
+  }
+}
+
+export async function reorderSitesAction(
+  updates: { id: string; category: string; sort_order: number }[]
+): Promise<ActionResult> {
+  const authErr = await requireAuth();
+  if (authErr) return authErr;
+  if (!Array.isArray(updates) || updates.length === 0) return { success: false, error: "排序数据不能为空" };
+  if (updates.some((item) => !item.id || !item.category.trim() || !Number.isFinite(item.sort_order))) {
+    return { success: false, error: "排序数据无效" };
+  }
+
+  try {
+    reorderSites(updates.map((item) => ({
+      id: item.id,
+      category: item.category.trim(),
+      sort_order: Math.trunc(item.sort_order),
+    })));
+    revalidatePath("/");
+    revalidatePath("/dash");
+    return { success: true };
+  } catch (e) {
+    console.error("保存站点排序失败:", e);
+    return { success: false, error: "保存站点排序失败" };
   }
 }
 
@@ -268,6 +313,15 @@ export async function updateConfigAction(config: Partial<SiteConfig>): Promise<A
   if (config.site_description !== undefined && !config.site_description.trim()) return { success: false, error: "站点描述不能为空" };
   if (config.theme_color !== undefined && !/^#[0-9a-fA-F]{6}$/.test(config.theme_color)) {
     return { success: false, error: "主题色必须是 6 位十六进制颜色" };
+  }
+  if (config.home_columns !== undefined) {
+    const columns = Number(config.home_columns);
+    if (!Number.isInteger(columns) || columns < 1 || columns > 8) {
+      return { success: false, error: "首页列数必须在 1 到 8 之间" };
+    }
+  }
+  if (config.github_url !== undefined && config.github_url.trim() && !/^https?:\/\//i.test(config.github_url)) {
+    return { success: false, error: "GitHub 链接必须以 http:// 或 https:// 开头" };
   }
   try {
     updateConfig(config);

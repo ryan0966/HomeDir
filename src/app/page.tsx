@@ -10,6 +10,8 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
   const { sites, categories, config, shortcuts } = getSites();
   const defaultCategory = categories.includes(config.default_category) ? config.default_category : "all";
+  const githubUrl = config.github_url || "https://github.com/ryan0966/HomeDir";
+  const homeColumns = Number.parseInt(config.home_columns, 10);
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-5xl flex-col px-4 pt-8 sm:px-6 lg:px-8">
@@ -22,7 +24,7 @@ export default async function Page() {
           <Terminal className="size-5" />
         )}
         <span className="flex-1 text-sm font-semibold tracking-tight">{config.site_name}</span>
-        <a href="https://github.com/52Lxcloud/HomeDir" target="_blank" rel="noopener noreferrer" className="text-muted-foreground/50 transition-colors hover:text-muted-foreground">
+        <a href={githubUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground/50 transition-colors hover:text-muted-foreground">
           <GithubIcon className="size-4" />
         </a>
       </header>
@@ -35,6 +37,8 @@ export default async function Page() {
           shortcuts={shortcuts}
           autoDetectNetwork={config.auto_detect_network === "true"}
           defaultCategory={defaultCategory}
+          homeColumns={Number.isFinite(homeColumns) ? homeColumns : 3}
+          weatherEnabled={config.weather_enabled === "true"}
         />
       </div>
 

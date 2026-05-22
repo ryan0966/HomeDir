@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { type CSSProperties, useState, useMemo, useRef, useEffect, useCallback } from "react";
 import type { SiteData, ShortcutConfig } from "@/lib/types";
 import { getIcon, getIconUrl } from "@/lib/icons";
 import { SearchDialog } from "@/components/search-dialog";
@@ -8,7 +8,7 @@ import { ShortcutHints } from "@/components/shortcut-hints";
 import { NetworkToggle } from "@/components/network-toggle";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { CloudSun, LocateFixed, Search } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import NumberFlow from "@number-flow/react";
 
@@ -51,6 +51,141 @@ function Clock() {
           <div className="mt-1 h-4 w-14 animate-pulse rounded bg-muted-foreground/10" />
         </>
       )}
+    </div>
+  );
+}
+
+type WeatherState =
+  | { status: "loading" }
+  | { status: "ready"; location: string; temperature: number; windSpeed: number; text: string }
+  | { status: "error" };
+
+const weatherText: Record<number, string> = {
+  0: "晴",
+  1: "少云",
+  2: "多云",
+  3: "阴",
+  45: "雾",
+  48: "雾凇",
+  51: "小毛毛雨",
+  53: "毛毛雨",
+  55: "强毛毛雨",
+  61: "小雨",
+  63: "中雨",
+  65: "大雨",
+  71: "小雪",
+  73: "中雪",
+  75: "大雪",
+  80: "阵雨",
+  81: "强阵雨",
+  82: "暴雨",
+  95: "雷雨",
+};
+
+async function getIpLocation(): Promise<{ latitude: number; longitude: number; location: string } | null> {
+  const endpoints = [
+    "https://ipapi.co/json/",
+    "https://ipwho.is/?lang=zh-CN",
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const latitude = Number(data.latitude ?? data.lat);
+      const longitude = Number(data.longitude ?? data.lon);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+      const location = [data.city, data.region, data.country_name ?? data.country]
+        .filter(Boolean)
+        .slice(0, 2)
+        .join(" · ");
+      return { latitude, longitude, location: location || "当前位置" };
+    } catch {}
+  }
+  return null;
+}
+
+function getBrowserLocation(): Promise<{ latitude: number; longitude: number; location: string } | null> {
+  if (!("geolocation" in navigator)) return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        location: "当前位置",
+      }),
+      () => resolve(null),
+      { enableHighAccuracy: false, timeout: 3500, maximumAge: 30 * 60 * 1000 }
+    );
+  });
+}
+
+function WeatherBadge({ enabled }: { enabled: boolean }) {
+  const [weather, setWeather] = useState<WeatherState>({ status: "loading" });
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+
+    async function load() {
+      setWeather({ status: "loading" });
+      const location = (await getBrowserLocation()) ?? (await getIpLocation());
+      if (!location) {
+        if (!cancelled) setWeather({ status: "error" });
+        return;
+      }
+
+      try {
+        const url = new URL("https://api.open-meteo.com/v1/forecast");
+        url.searchParams.set("latitude", String(location.latitude));
+        url.searchParams.set("longitude", String(location.longitude));
+        url.searchParams.set("current", "temperature_2m,weather_code,wind_speed_10m");
+        url.searchParams.set("timezone", "auto");
+        const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(6000) });
+        if (!res.ok) throw new Error("weather request failed");
+        const data = await res.json();
+        const current = data.current;
+        if (!current) throw new Error("weather payload invalid");
+        if (!cancelled) {
+          setWeather({
+            status: "ready",
+            location: location.location,
+            temperature: Math.round(Number(current.temperature_2m)),
+            windSpeed: Math.round(Number(current.wind_speed_10m)),
+            text: weatherText[Number(current.weather_code)] ?? "天气",
+          });
+        }
+      } catch {
+        if (!cancelled) setWeather({ status: "error" });
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [enabled]);
+
+  if (!enabled) return null;
+
+  if (weather.status === "loading") {
+    return (
+      <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
+        <CloudSun className="size-3.5 animate-pulse" />
+        <span>天气加载中</span>
+      </div>
+    );
+  }
+
+  if (weather.status === "error") return null;
+
+  return (
+    <div className="mt-1 flex max-w-[15rem] items-center gap-1.5 truncate text-[11px] text-muted-foreground/75">
+      <LocateFixed className="size-3 shrink-0" />
+      <span className="truncate">{weather.location}</span>
+      <span className="shrink-0">{weather.text}</span>
+      <span className="shrink-0">{weather.temperature}°C</span>
+      <span className="shrink-0 text-muted-foreground/45">{weather.windSpeed}km/h</span>
     </div>
   );
 }
@@ -161,12 +296,16 @@ export function HomePage({
   shortcuts,
   autoDetectNetwork,
   defaultCategory,
+  homeColumns,
+  weatherEnabled,
 }: {
   sites: SiteData[];
   categories: string[];
   shortcuts: ShortcutConfig[];
   autoDetectNetwork: boolean;
   defaultCategory: string;
+  homeColumns: number;
+  weatherEnabled: boolean;
 }) {
   const [active, setActive] = useState(defaultCategory);
   const [isInternal, setIsInternal] = useState(false);
@@ -189,6 +328,11 @@ export function HomePage({
     () => (active === ALL ? sites : sites.filter((s) => s.category === active)),
     [sites, active]
   );
+  const preferredColumns = Math.min(8, Math.max(1, Math.trunc(homeColumns || 3)));
+  const minCardWidth = Math.max(140, Math.floor(1024 / preferredColumns) - 12);
+  const gridStyle = {
+    gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${minCardWidth}px), 1fr))`,
+  } satisfies CSSProperties;
 
   return (
     <>
@@ -197,7 +341,10 @@ export function HomePage({
 
       {/* 工具栏 */}
       <div className="mb-8 flex items-center justify-between">
-        <Clock />
+        <div>
+          <Clock />
+          <WeatherBadge enabled={weatherEnabled} />
+        </div>
         <div className="flex items-center gap-1 rounded-xl border bg-muted/40 p-1">
           <Button
             variant="ghost"
@@ -232,7 +379,7 @@ export function HomePage({
           </span>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <div className="grid gap-3" style={gridStyle}>
           {filtered.map((site) => {
             const Icon = getIcon(site.icon);
             const url = (isInternal ? site.url.internal : site.url.external) || site.url.internal || site.url.external;

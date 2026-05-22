@@ -1,6 +1,6 @@
 "use client";
 
-import { type CSSProperties, useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { type CSSProperties, type ReactNode, useState, useMemo, useRef, useEffect, useCallback } from "react";
 import type { SiteData, ShortcutConfig } from "@/lib/types";
 import { getIcon, getIconUrl } from "@/lib/icons";
 import { SearchDialog } from "@/components/search-dialog";
@@ -22,7 +22,7 @@ function getGreeting(hour: number) {
   return "夜深了";
 }
 
-function Clock() {
+function Clock({ weather }: { weather: ReactNode }) {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -36,7 +36,10 @@ function Clock() {
     <div className="text-xs text-muted-foreground">
       {now ? (
         <>
-          <div>{getGreeting(now.getHours())} 👋</div>
+          <div className="flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1">
+            <span>{getGreeting(now.getHours())} 👋</span>
+            {weather}
+          </div>
           <div className="flex items-center">
             <NumberFlow value={now.getHours()} format={{ minimumIntegerDigits: 2 }} />
             <span className="mx-px opacity-50">:</span>
@@ -82,10 +85,50 @@ const weatherText: Record<number, string> = {
   95: "雷雨",
 };
 
+const locationNameMap: Record<string, string> = {
+  "hong kong": "香港",
+  hongkong: "香港",
+  "hong kong sar china": "香港",
+  macao: "澳门",
+  macau: "澳门",
+  taipei: "台北",
+  beijing: "北京",
+  shanghai: "上海",
+  shenzhen: "深圳",
+  guangzhou: "广州",
+};
+
+function normalizeLocationName(name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) return "当前位置";
+  return locationNameMap[trimmed.toLowerCase()] ?? trimmed;
+}
+
+async function geocodeLocation(query: string): Promise<{ latitude: number; longitude: number; location: string } | null> {
+  try {
+    const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
+    url.searchParams.set("name", query.trim());
+    url.searchParams.set("count", "1");
+    url.searchParams.set("language", "zh");
+    url.searchParams.set("format", "json");
+    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const first = data.results?.[0];
+    const latitude = Number(first?.latitude);
+    const longitude = Number(first?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    const location = [first.name, first.admin1].filter(Boolean).slice(0, 2).join(" · ");
+    return { latitude, longitude, location: normalizeLocationName(location || query) };
+  } catch {
+    return null;
+  }
+}
+
 async function getIpLocation(): Promise<{ latitude: number; longitude: number; location: string } | null> {
   const endpoints = [
-    "https://ipapi.co/json/",
     "https://ipwho.is/?lang=zh-CN",
+    "https://ipapi.co/json/",
   ];
 
   for (const endpoint of endpoints) {
@@ -100,7 +143,7 @@ async function getIpLocation(): Promise<{ latitude: number; longitude: number; l
         .filter(Boolean)
         .slice(0, 2)
         .join(" · ");
-      return { latitude, longitude, location: location || "当前位置" };
+      return { latitude, longitude, location: normalizeLocationName(location || "当前位置") };
     } catch {}
   }
   return null;
@@ -122,7 +165,7 @@ function getBrowserLocation(): Promise<{ latitude: number; longitude: number; lo
   });
 }
 
-function WeatherBadge({ enabled }: { enabled: boolean }) {
+function WeatherBadge({ enabled, locationQuery }: { enabled: boolean; locationQuery: string }) {
   const [weather, setWeather] = useState<WeatherState>({ status: "loading" });
 
   useEffect(() => {
@@ -131,7 +174,10 @@ function WeatherBadge({ enabled }: { enabled: boolean }) {
 
     async function load() {
       setWeather({ status: "loading" });
-      const location = (await getBrowserLocation()) ?? (await getIpLocation());
+      const configuredLocation = locationQuery.trim();
+      const location = configuredLocation
+        ? await geocodeLocation(configuredLocation)
+        : (await getBrowserLocation()) ?? (await getIpLocation());
       if (!location) {
         if (!cancelled) setWeather({ status: "error" });
         return;
@@ -164,29 +210,36 @@ function WeatherBadge({ enabled }: { enabled: boolean }) {
 
     load();
     return () => { cancelled = true; };
-  }, [enabled]);
+  }, [enabled, locationQuery]);
 
   if (!enabled) return null;
 
   if (weather.status === "loading") {
     return (
-      <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground/70">
         <CloudSun className="size-3.5 animate-pulse" />
         <span>天气加载中</span>
-      </div>
+      </span>
     );
   }
 
-  if (weather.status === "error") return null;
+  if (weather.status === "error") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-1.5 py-0.5 text-[11px] text-muted-foreground/55">
+        <CloudSun className="size-3.5" />
+        <span>天气暂不可用</span>
+      </span>
+    );
+  }
 
   return (
-    <div className="mt-1 flex max-w-[15rem] items-center gap-1.5 truncate text-[11px] text-muted-foreground/75">
-      <LocateFixed className="size-3 shrink-0" />
+    <span className="inline-flex max-w-[17rem] items-center gap-1.5 truncate rounded-md border border-border/70 bg-muted/35 px-1.5 py-0.5 text-[11px] text-muted-foreground/80">
+      <LocateFixed className="size-3 shrink-0 text-primary" />
       <span className="truncate">{weather.location}</span>
+      <span className="shrink-0 text-foreground/80">{weather.temperature}°C</span>
       <span className="shrink-0">{weather.text}</span>
-      <span className="shrink-0">{weather.temperature}°C</span>
-      <span className="shrink-0 text-muted-foreground/45">{weather.windSpeed}km/h</span>
-    </div>
+      <span className="shrink-0 text-muted-foreground/45">风 {weather.windSpeed}km/h</span>
+    </span>
   );
 }
 
@@ -298,6 +351,7 @@ export function HomePage({
   defaultCategory,
   homeColumns,
   weatherEnabled,
+  weatherLocation,
 }: {
   sites: SiteData[];
   categories: string[];
@@ -306,6 +360,7 @@ export function HomePage({
   defaultCategory: string;
   homeColumns: number;
   weatherEnabled: boolean;
+  weatherLocation: string;
 }) {
   const [active, setActive] = useState(defaultCategory);
   const [isInternal, setIsInternal] = useState(false);
@@ -329,9 +384,8 @@ export function HomePage({
     [sites, active]
   );
   const preferredColumns = Math.min(8, Math.max(1, Math.trunc(homeColumns || 3)));
-  const minCardWidth = Math.max(140, Math.floor(1024 / preferredColumns) - 12);
   const gridStyle = {
-    gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${minCardWidth}px), 1fr))`,
+    gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, max(160px, calc((100% - ${(preferredColumns - 1) * 12}px) / ${preferredColumns}))), 1fr))`,
   } satisfies CSSProperties;
 
   return (
@@ -341,10 +395,7 @@ export function HomePage({
 
       {/* 工具栏 */}
       <div className="mb-8 flex items-center justify-between">
-        <div>
-          <Clock />
-          <WeatherBadge enabled={weatherEnabled} />
-        </div>
+        <Clock weather={<WeatherBadge enabled={weatherEnabled} locationQuery={weatherLocation} />} />
         <div className="flex items-center gap-1 rounded-xl border bg-muted/40 p-1">
           <Button
             variant="ghost"

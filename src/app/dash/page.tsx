@@ -33,6 +33,7 @@ export default async function AdminPage() {
     default_category: config.default_category,
     home_columns: config.home_columns,
     weather_enabled: config.weather_enabled,
+    weather_location: config.weather_location,
     github_url: config.github_url,
   };
 

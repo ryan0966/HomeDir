@@ -26,6 +26,7 @@ export function AdminSettings({
     default_category: string;
     home_columns: string;
     weather_enabled: string;
+    weather_location: string;
     github_url: string;
   };
   categories: string[];
@@ -41,6 +42,7 @@ export function AdminSettings({
     default_category: config.default_category,
     home_columns: config.home_columns,
     weather_enabled: config.weather_enabled,
+    weather_location: config.weather_location,
     github_url: config.github_url,
   });
   const [saving, setSaving] = useState(false);
@@ -243,12 +245,23 @@ export function AdminSettings({
                 <CloudSun className="size-3.5" />
                 首页天气
               </Label>
-              <p className="text-[11px] text-muted-foreground">根据浏览器定位或 IP 位置显示当前天气</p>
+              <p className="text-[11px] text-muted-foreground">可指定地区；留空时根据浏览器定位或 IP 位置显示</p>
             </div>
             <Switch
               checked={form.weather_enabled === "true"}
               onCheckedChange={(v) => setForm((p) => ({ ...p, weather_enabled: v ? "true" : "false" }))}
             />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="cfg_weather_location">天气地区</Label>
+            <Input
+              id="cfg_weather_location"
+              value={form.weather_location}
+              onChange={(e) => setForm((p) => ({ ...p, weather_location: e.target.value }))}
+              placeholder="例如：深圳、香港、上海浦东"
+              className="h-8 text-xs"
+            />
+            <p className="text-[11px] text-muted-foreground">填写后优先显示该地区天气，可避免 VPN/IP 定位偏差</p>
           </div>
         </div>
       </div>

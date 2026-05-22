@@ -39,6 +39,7 @@ export default async function Page() {
           defaultCategory={defaultCategory}
           homeColumns={Number.isFinite(homeColumns) ? homeColumns : 3}
           weatherEnabled={config.weather_enabled === "true"}
+          weatherLocation={config.weather_location}
         />
       </div>
 

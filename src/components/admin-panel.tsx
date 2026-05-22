@@ -12,6 +12,7 @@ type SafeConfig = {
   default_category: string;
   home_columns: string;
   weather_enabled: string;
+  weather_location: string;
   github_url: string;
 };
 import { AdminOverview } from "@/components/admin/overview";

@@ -122,6 +122,7 @@ export interface SiteConfig {
   default_category: string;
   home_columns: string;
   weather_enabled: string;
+  weather_location: string;
   github_url: string;
   admin_password: string;
   admin_session: string;
@@ -138,6 +139,7 @@ const defaultConfig: SiteConfig = {
   default_category: "all",
   home_columns: "3",
   weather_enabled: "true",
+  weather_location: "",
   github_url: "https://github.com/ryan0966/HomeDir",
   admin_password: "",
   admin_session: "",
@@ -158,6 +160,7 @@ export function getConfig(): SiteConfig {
     default_category: map.get("default_category") || defaultConfig.default_category,
     home_columns: map.get("home_columns") || defaultConfig.home_columns,
     weather_enabled: map.get("weather_enabled") ?? defaultConfig.weather_enabled,
+    weather_location: map.get("weather_location") || defaultConfig.weather_location,
     github_url: map.get("github_url") || defaultConfig.github_url,
     admin_password: map.get("admin_password") || "",
     admin_session: map.get("admin_session") || "",

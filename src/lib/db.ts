@@ -116,6 +116,10 @@ export interface SiteConfig {
   site_description: string;
   footer_text: string;
   auto_detect_network: string;
+  site_logo: string;
+  theme_color: string;
+  category_order: string;
+  default_category: string;
   admin_password: string;
   admin_session: string;
 }
@@ -125,6 +129,10 @@ const defaultConfig: SiteConfig = {
   site_description: "快速访问内外网服务的导航中心",
   footer_text: "© 2026 Lxcloud · Powered by <a href=\"https://github.com/52Lxcloud/HomeDir\">HomeDir</a>",
   auto_detect_network: "false",
+  site_logo: "",
+  theme_color: "#22c55e",
+  category_order: "[]",
+  default_category: "all",
   admin_password: "",
   admin_session: "",
 };
@@ -138,6 +146,10 @@ export function getConfig(): SiteConfig {
     site_description: map.get("site_description") || defaultConfig.site_description,
     footer_text: map.get("footer_text") || defaultConfig.footer_text,
     auto_detect_network: map.get("auto_detect_network") ?? defaultConfig.auto_detect_network,
+    site_logo: map.get("site_logo") || defaultConfig.site_logo,
+    theme_color: map.get("theme_color") || defaultConfig.theme_color,
+    category_order: map.get("category_order") || defaultConfig.category_order,
+    default_category: map.get("default_category") || defaultConfig.default_category,
     admin_password: map.get("admin_password") || "",
     admin_session: map.get("admin_session") || "",
   };
@@ -159,7 +171,7 @@ function genId(): string {
 
 export function getAllSites(): SiteRow[] {
   const db = getDb();
-  const rows = db.prepare("SELECT * FROM sites ORDER BY category, sort_order, name").all() as SiteRow[];
+  const rows = db.prepare("SELECT * FROM sites ORDER BY sort_order, name").all() as SiteRow[];
 
   return rows;
 }
@@ -236,12 +248,51 @@ export function renameCategory(oldName: string, newName: string): number {
   const db = getDb();
   const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).replace(' ', 'T');
   const result = db.prepare("UPDATE sites SET category = ?, updated_at = ? WHERE category = ?").run(newName, now, oldName);
+  const config = getConfig();
+  const order = parseCategoryOrder(config.category_order).map((category) => category === oldName ? newName : category);
+  const seen = new Set<string>();
+  updateConfig({
+    category_order: JSON.stringify(order.filter((category) => {
+      if (seen.has(category)) return false;
+      seen.add(category);
+      return true;
+    })),
+    ...(config.default_category === oldName ? { default_category: newName } : {}),
+  });
   return result.changes;
 }
 
 export function deleteCategory(name: string): number {
   const db = getDb();
   const result = db.prepare("DELETE FROM sites WHERE category = ?").run(name);
+  const config = getConfig();
+  const order = parseCategoryOrder(config.category_order).filter((category) => category !== name);
+  updateConfig({
+    category_order: JSON.stringify(order),
+    ...(config.default_category === name ? { default_category: "all" } : {}),
+  });
   return result.changes;
 }
 
+export function parseCategoryOrder(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export function saveCategoryOrder(categories: string[]): void {
+  const seen = new Set<string>();
+  const ordered = categories
+    .map((category) => category.trim())
+    .filter((category) => {
+      if (!category || seen.has(category)) return false;
+      seen.add(category);
+      return true;
+    });
+
+  updateConfig({ category_order: JSON.stringify(ordered) });
+}

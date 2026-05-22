@@ -2,7 +2,15 @@
 
 import { useState, useMemo, useEffect } from "react";
 import type { SiteData } from "@/lib/types";
-type SafeConfig = { site_name: string; site_description: string; footer_text: string; auto_detect_network: string };
+type SafeConfig = {
+  site_name: string;
+  site_description: string;
+  footer_text: string;
+  auto_detect_network: string;
+  site_logo: string;
+  theme_color: string;
+  default_category: string;
+};
 import { AdminOverview } from "@/components/admin/overview";
 import { AdminSites } from "@/components/admin/sites";
 import { AdminCategories } from "@/components/admin/categories";
@@ -97,13 +105,13 @@ export function AdminPanel({
         <AdminSites sites={sites} categories={categories} />
       )}
       {tab === "categories" && (
-        <AdminCategories sites={sites} />
+        <AdminCategories sites={sites} categories={categories} defaultCategory={config.default_category} />
       )}
       {tab === "shortcuts" && (
         <AdminShortcuts shortcuts={shortcuts} sites={sites} />
       )}
       {tab === "settings" && (
-        <AdminSettings config={config} />
+        <AdminSettings config={config} categories={categories} />
       )}
       {tab === "about" && (
         <AdminAbout />

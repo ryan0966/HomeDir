@@ -1,22 +1,44 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { updateConfigAction } from "@/app/dash/actions";
+import { useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { updateConfigAction, uploadLogoAction } from "@/app/dash/actions";
+import { getIconUrl } from "@/lib/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Save } from "lucide-react";
+import { Image, Loader2, Save, Upload, X } from "lucide-react";
 
-export function AdminSettings({ config }: { config: { site_name: string; site_description: string; footer_text: string; auto_detect_network: string } }) {
+export function AdminSettings({
+  config,
+  categories,
+}: {
+  config: {
+    site_name: string;
+    site_description: string;
+    footer_text: string;
+    auto_detect_network: string;
+    site_logo: string;
+    theme_color: string;
+    default_category: string;
+  };
+  categories: string[];
+}) {
+  const router = useRouter();
   const [form, setForm] = useState({
     site_name: config.site_name,
     site_description: config.site_description,
     footer_text: config.footer_text,
     auto_detect_network: config.auto_detect_network,
+    site_logo: config.site_logo,
+    theme_color: config.theme_color,
+    default_category: config.default_category,
   });
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = useCallback(async () => {
     if (!form.site_name.trim()) { toast.error("站点名称不能为空"); return; }
@@ -27,8 +49,9 @@ export function AdminSettings({ config }: { config: { site_name: string; site_de
       const result = await updateConfigAction(basicConfig);
       if (!result.success) { toast.error(result.error); return; }
       toast.success("配置已保存");
+      router.refresh();
     } finally { setSaving(false); }
-  }, [form]);
+  }, [form, router]);
 
   return (
     <div className="space-y-6">
@@ -63,6 +86,92 @@ export function AdminSettings({ config }: { config: { site_name: string; site_de
               onChange={(e) => setForm((p) => ({ ...p, footer_text: e.target.value }))}
             />
             <p className="text-[11px] text-muted-foreground">支持 HTML，留空则不显示</p>
+          </div>
+          <div className="grid gap-1.5">
+            <Label>网站 Logo</Label>
+            <div className="flex items-center gap-2">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/30">
+                {form.site_logo ? (
+                  <img src={getIconUrl(form.site_logo)} alt="" className="size-7 rounded object-contain" />
+                ) : (
+                  <Image className="size-4 text-muted-foreground" />
+                )}
+              </div>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setUploadingLogo(true);
+                  try {
+                    const fd = new FormData();
+                    fd.append("file", file);
+                    const result = await uploadLogoAction(fd);
+                    if (!result.success) {
+                      toast.error(result.error);
+                      return;
+                    }
+                    setForm((p) => ({ ...p, site_logo: result.data! }));
+                    toast.success("Logo 已选择，保存后生效");
+                  } finally {
+                    setUploadingLogo(false);
+                    e.target.value = "";
+                  }
+                }}
+              />
+              <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} disabled={uploadingLogo}>
+                {uploadingLogo ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+                上传
+              </Button>
+              {form.site_logo && (
+                <Button variant="ghost" size="sm" onClick={() => setForm((p) => ({ ...p, site_logo: "" }))}>
+                  <X className="size-3.5" />
+                  移除
+                </Button>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground">显示在首页标题左侧</p>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="cfg_theme_color">主题色</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="cfg_theme_color"
+                type="color"
+                value={/^#[0-9a-fA-F]{6}$/.test(form.theme_color) ? form.theme_color : "#22c55e"}
+                onChange={(e) => setForm((p) => ({ ...p, theme_color: e.target.value }))}
+                className="h-9 w-14 shrink-0 p-1"
+              />
+              <Input
+                value={form.theme_color}
+                onChange={(e) => setForm((p) => ({ ...p, theme_color: e.target.value }))}
+                placeholder="#22c55e"
+                className="font-mono text-xs"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground">用于首页和后台的主色调</p>
+          </div>
+          <div className="grid gap-1.5">
+            <Label>首页默认分类</Label>
+            <div className="flex flex-wrap gap-2">
+              {["all", ...categories].map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, default_category: category }))}
+                  className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                    form.default_category === category
+                      ? "border-foreground/20 bg-foreground text-background"
+                      : "border-border bg-transparent text-muted-foreground hover:border-foreground/20 hover:text-foreground"
+                  }`}
+                >
+                  {category === "all" ? "全部" : category}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <div className="mt-4 flex justify-end">

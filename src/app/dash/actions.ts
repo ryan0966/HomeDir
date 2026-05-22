@@ -9,6 +9,7 @@ import {
   renameCategory,
   deleteCategory,
   updateConfig,
+  saveCategoryOrder,
   createShortcut,
   deleteShortcut,
   getAllShortcuts,
@@ -130,6 +131,21 @@ export async function deleteCategoryAction(name: string): Promise<ActionResult> 
   }
 }
 
+export async function updateCategoryOrderAction(categories: string[]): Promise<ActionResult> {
+  const authErr = await requireAuth();
+  if (authErr) return authErr;
+
+  try {
+    saveCategoryOrder(categories);
+    revalidatePath("/");
+    revalidatePath("/dash");
+    return { success: true };
+  } catch (e) {
+    console.error("保存分类排序失败:", e);
+    return { success: false, error: "保存分类排序失败" };
+  }
+}
+
 // 抓取 favicon 并保存到本地文件
 export async function fetchFaviconAction(url: string): Promise<ActionResult<string>> {
   const authErr = await requireAuth<string>();
@@ -204,6 +220,10 @@ export async function uploadIconAction(formData: FormData): Promise<ActionResult
   }
 }
 
+export async function uploadLogoAction(formData: FormData): Promise<ActionResult<string>> {
+  return uploadIconAction(formData);
+}
+
 // 热键操作
 export async function createShortcutAction(key: string, siteId: string): Promise<ActionResult> {
   const authErr = await requireAuth();
@@ -246,6 +266,9 @@ export async function updateConfigAction(config: Partial<SiteConfig>): Promise<A
   if (authErr) return authErr;
   if (config.site_name !== undefined && !config.site_name.trim()) return { success: false, error: "站点名称不能为空" };
   if (config.site_description !== undefined && !config.site_description.trim()) return { success: false, error: "站点描述不能为空" };
+  if (config.theme_color !== undefined && !/^#[0-9a-fA-F]{6}$/.test(config.theme_color)) {
+    return { success: false, error: "主题色必须是 6 位十六进制颜色" };
+  }
   try {
     updateConfig(config);
     revalidatePath("/");

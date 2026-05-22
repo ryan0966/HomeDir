@@ -5,6 +5,7 @@ import { ArrowLeft, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getSites } from "@/lib/sites";
 import { getAllShortcuts } from "@/lib/db";
+import { buildThemeCss } from "@/lib/theme";
 import { AdminPanel } from "@/components/admin-panel";
 import { isAuthenticated, hasPassword } from "@/lib/auth";
 import { logoutAction } from "./login/actions";
@@ -27,10 +28,14 @@ export default async function AdminPage() {
     site_description: config.site_description,
     footer_text: config.footer_text,
     auto_detect_network: config.auto_detect_network,
+    site_logo: config.site_logo,
+    theme_color: config.theme_color,
+    default_category: config.default_category,
   };
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+      <style dangerouslySetInnerHTML={{ __html: buildThemeCss(config.theme_color) }} />
       <div className="mb-8 flex items-center gap-3">
         <Link href="/">
           <Button variant="ghost" size="icon-sm">

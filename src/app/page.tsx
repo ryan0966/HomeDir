@@ -1,18 +1,26 @@
 import { Terminal } from "lucide-react";
 import { GithubIcon } from "@/components/icons/github";
 import { getSites } from "@/lib/sites";
+import { getIconUrl } from "@/lib/icons";
+import { buildThemeCss } from "@/lib/theme";
 import { HomePage } from "@/components/home-page";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const { sites, categories, config, shortcuts } = getSites();
+  const defaultCategory = categories.includes(config.default_category) ? config.default_category : "all";
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-5xl flex-col px-4 pt-8 sm:px-6 lg:px-8">
+      <style dangerouslySetInnerHTML={{ __html: buildThemeCss(config.theme_color) }} />
       {/* 标题 — Server Component，0 JS */}
       <header className="mb-8 flex items-center gap-2.5">
-        <Terminal className="size-5" />
+        {config.site_logo ? (
+          <img src={getIconUrl(config.site_logo)} alt="" className="size-5 rounded object-contain" />
+        ) : (
+          <Terminal className="size-5" />
+        )}
         <span className="flex-1 text-sm font-semibold tracking-tight">{config.site_name}</span>
         <a href="https://github.com/52Lxcloud/HomeDir" target="_blank" rel="noopener noreferrer" className="text-muted-foreground/50 transition-colors hover:text-muted-foreground">
           <GithubIcon className="size-4" />
@@ -21,7 +29,13 @@ export default async function Page() {
 
       {/* 交互区域 — Client Component */}
       <div className="flex-1">
-        <HomePage sites={sites} categories={categories} shortcuts={shortcuts} autoDetectNetwork={config.auto_detect_network === "true"} />
+        <HomePage
+          sites={sites}
+          categories={categories}
+          shortcuts={shortcuts}
+          autoDetectNetwork={config.auto_detect_network === "true"}
+          defaultCategory={defaultCategory}
+        />
       </div>
 
       {/* 底部 */}

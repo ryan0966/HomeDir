@@ -160,13 +160,15 @@ export function HomePage({
   categories,
   shortcuts,
   autoDetectNetwork,
+  defaultCategory,
 }: {
   sites: SiteData[];
   categories: string[];
   shortcuts: ShortcutConfig[];
   autoDetectNetwork: boolean;
+  defaultCategory: string;
 }) {
-  const [active, setActive] = useState(ALL);
+  const [active, setActive] = useState(defaultCategory);
   const [isInternal, setIsInternal] = useState(false);
   const [manualOverride, setManualOverride] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);

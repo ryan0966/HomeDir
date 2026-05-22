@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import type { SiteData } from "@/lib/types";
 import { getIcon, getIconUrl } from "@/lib/icons";
 import {
   renameCategoryAction,
   deleteCategoryAction,
+  updateCategoryOrderAction,
 } from "@/app/dash/actions";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,14 +19,37 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Pencil, Trash2, Loader2, Save, AlertTriangle } from "lucide-react";
+import { ArrowDown, ArrowUp, Pencil, Trash2, Loader2, Save, AlertTriangle } from "lucide-react";
 
-export function AdminCategories({ sites }: { sites: SiteData[] }) {
+export function AdminCategories({
+  sites,
+  categories,
+  defaultCategory,
+}: {
+  sites: SiteData[];
+  categories: string[];
+  defaultCategory: string;
+}) {
+  const router = useRouter();
   const categoryStats = useMemo(() => {
     const map = new Map<string, number>();
     for (const s of sites) map.set(s.category, (map.get(s.category) || 0) + 1);
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
-  }, [sites]);
+    return categories.map((category) => [category, map.get(category) || 0] as const);
+  }, [sites, categories]);
+
+  const moveCategory = useCallback(async (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= categories.length) return;
+    const next = [...categories];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    const result = await updateCategoryOrderAction(next);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("分类排序已保存");
+    router.refresh();
+  }, [categories, router]);
 
   // 重命名
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
@@ -44,8 +69,9 @@ export function AdminCategories({ sites }: { sites: SiteData[] }) {
       if (!result.success) { toast.error(result.error); return; }
       toast.success(`已重命名为「${renameValue}」`);
       setRenameTarget(null);
+      router.refresh();
     } finally { setRenaming(false); }
-  }, [renameTarget, renameValue]);
+  }, [renameTarget, renameValue, router]);
 
   // 删除
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -59,8 +85,9 @@ export function AdminCategories({ sites }: { sites: SiteData[] }) {
       if (!result.success) { toast.error(result.error); return; }
       toast.success("分类及其站点已删除");
       setDeleteTarget(null);
+      router.refresh();
     } finally { setDeletingItem(false); }
-  }, [deleteTarget]);
+  }, [deleteTarget, router]);
 
   return (
     <>
@@ -70,7 +97,7 @@ export function AdminCategories({ sites }: { sites: SiteData[] }) {
             暂无分类
           </div>
         ) : (
-          categoryStats.map(([cat, count]) => {
+          categoryStats.map(([cat, count], index) => {
             const catSites = sites.filter((s) => s.category === cat);
             return (
               <div
@@ -79,10 +106,21 @@ export function AdminCategories({ sites }: { sites: SiteData[] }) {
               >
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <div className="text-sm font-medium">{cat}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-medium">{cat}</div>
+                      {defaultCategory === cat && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">默认</span>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground">{count} 个站点</div>
                   </div>
                   <div className="flex gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                    <Button variant="ghost" size="icon-sm" disabled={index === 0} onClick={() => moveCategory(index, -1)}>
+                      <ArrowUp className="size-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon-sm" disabled={index === categoryStats.length - 1} onClick={() => moveCategory(index, 1)}>
+                      <ArrowDown className="size-3.5" />
+                    </Button>
                     <Button variant="ghost" size="icon-sm" onClick={() => openRename(cat)}>
                       <Pencil className="size-3.5" />
                     </Button>

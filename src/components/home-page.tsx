@@ -83,6 +83,52 @@ const weatherText: Record<number, string> = {
   81: "强阵雨",
   82: "暴雨",
   95: "雷雨",
+  113: "晴",
+  116: "多云间晴",
+  119: "多云",
+  122: "阴",
+  143: "薄雾",
+  176: "局部有雨",
+  179: "局部有雪",
+  182: "雨夹雪",
+  185: "冻雨",
+  200: "雷雨",
+  227: "吹雪",
+  230: "暴雪",
+  248: "雾",
+  260: "冻雾",
+  263: "小毛毛雨",
+  266: "毛毛雨",
+  281: "冻毛毛雨",
+  284: "强冻毛毛雨",
+  293: "小雨",
+  296: "小雨",
+  299: "中雨",
+  302: "中雨",
+  305: "大雨",
+  308: "大雨",
+  311: "冻雨",
+  314: "强冻雨",
+  317: "雨夹雪",
+  320: "小雪",
+  323: "小雪",
+  326: "小雪",
+  329: "中雪",
+  332: "中雪",
+  335: "大雪",
+  338: "大雪",
+  350: "冰粒",
+  353: "阵雨",
+  356: "强阵雨",
+  359: "暴雨",
+  362: "雨夹雪",
+  365: "强雨夹雪",
+  368: "阵雪",
+  371: "强阵雪",
+  386: "雷阵雨",
+  389: "雷雨",
+  392: "雷阵雪",
+  395: "强雷阵雪",
 };
 
 const locationNameMap: Record<string, string> = {
@@ -165,6 +211,68 @@ function getBrowserLocation(): Promise<{ latitude: number; longitude: number; lo
   });
 }
 
+type WeatherResult = { location: string; temperature: number; windSpeed: number; text: string };
+
+async function fetchWttrWeather(
+  location: { latitude: number; longitude: number; location: string } | null,
+  query?: string
+): Promise<WeatherResult | null> {
+  try {
+    const target = query?.trim() || (location ? `${location.latitude},${location.longitude}` : "");
+    if (!target) return null;
+    const url = new URL(`https://wttr.in/${encodeURIComponent(target)}`);
+    url.searchParams.set("format", "j1");
+    url.searchParams.set("lang", "zh");
+    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const current = data.current_condition?.[0];
+    if (!current) return null;
+    const code = Number(current.weatherCode);
+    const fallbackText = current.lang_zh?.[0]?.value || current.weatherDesc?.[0]?.value || "天气";
+    const nearest = data.nearest_area?.[0];
+    const nearestName = nearest?.areaName?.[0]?.value;
+    const displayName = normalizeLocationName(query?.trim() || location?.location || nearestName || "当前位置");
+    const temperature = Math.round(Number(current.temp_C));
+    const windSpeed = Math.round(Number(current.windspeedKmph));
+    if (!Number.isFinite(temperature) || !Number.isFinite(windSpeed)) return null;
+    return {
+      location: displayName,
+      temperature,
+      windSpeed,
+      text: weatherText[code] ?? fallbackText,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchOpenMeteoWeather(location: { latitude: number; longitude: number; location: string }): Promise<WeatherResult | null> {
+  try {
+    const url = new URL("https://api.open-meteo.com/v1/forecast");
+    url.searchParams.set("latitude", String(location.latitude));
+    url.searchParams.set("longitude", String(location.longitude));
+    url.searchParams.set("current", "temperature_2m,weather_code,wind_speed_10m");
+    url.searchParams.set("timezone", "auto");
+    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const current = data.current;
+    if (!current) return null;
+    const temperature = Math.round(Number(current.temperature_2m));
+    const windSpeed = Math.round(Number(current.wind_speed_10m));
+    if (!Number.isFinite(temperature) || !Number.isFinite(windSpeed)) return null;
+    return {
+      location: location.location,
+      temperature,
+      windSpeed,
+      text: weatherText[Number(current.weather_code)] ?? "天气",
+    };
+  } catch {
+    return null;
+  }
+}
+
 function WeatherBadge({ enabled, locationQuery }: { enabled: boolean; locationQuery: string }) {
   const [weather, setWeather] = useState<WeatherState>({ status: "loading" });
 
@@ -178,33 +286,23 @@ function WeatherBadge({ enabled, locationQuery }: { enabled: boolean; locationQu
       const location = configuredLocation
         ? await geocodeLocation(configuredLocation)
         : (await getBrowserLocation()) ?? (await getIpLocation());
-      if (!location) {
+
+      const weather = await fetchWttrWeather(location, configuredLocation)
+        ?? (location ? await fetchOpenMeteoWeather(location) : null);
+
+      if (!weather) {
         if (!cancelled) setWeather({ status: "error" });
         return;
       }
 
-      try {
-        const url = new URL("https://api.open-meteo.com/v1/forecast");
-        url.searchParams.set("latitude", String(location.latitude));
-        url.searchParams.set("longitude", String(location.longitude));
-        url.searchParams.set("current", "temperature_2m,weather_code,wind_speed_10m");
-        url.searchParams.set("timezone", "auto");
-        const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(6000) });
-        if (!res.ok) throw new Error("weather request failed");
-        const data = await res.json();
-        const current = data.current;
-        if (!current) throw new Error("weather payload invalid");
-        if (!cancelled) {
-          setWeather({
-            status: "ready",
-            location: location.location,
-            temperature: Math.round(Number(current.temperature_2m)),
-            windSpeed: Math.round(Number(current.wind_speed_10m)),
-            text: weatherText[Number(current.weather_code)] ?? "天气",
-          });
-        }
-      } catch {
-        if (!cancelled) setWeather({ status: "error" });
+      if (!cancelled) {
+        setWeather({
+          status: "ready",
+          location: weather.location,
+          temperature: weather.temperature,
+          windSpeed: weather.windSpeed,
+          text: weather.text,
+        });
       }
     }
 
